@@ -1,13 +1,26 @@
 {
   "name": "musician-gear-tracker-backend",
   "version": "1.0.0",
-  "description": "Backend for Musician Gear Tracker application",
+  "description": "Backend API for Musician Gear Tracker application",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "jest"
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch",
+    "lint": "eslint ."
   },
+  "keywords": [
+    "music",
+    "musicians",
+    "gear",
+    "tracker",
+    "inventory",
+    "equipment",
+    "api"
+  ],
+  "author": "Musician Gear Tracker Team",
+  "license": "MIT",
   "dependencies": {
     "aws-sdk": "^2.1430.0",
     "bcryptjs": "^2.4.3",
@@ -15,21 +28,21 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-validator": "^7.0.1",
-    "helmet": "^7.0.0",
-    "jsonwebtoken": "^9.0.1",
-    "mongoose": "^7.4.3",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.3",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
-    "redis": "^4.6.7",
-    "winston": "^3.10.0"
+    "redis": "^4.6.12",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
-    "jest": "^29.6.2",
-    "nodemon": "^3.0.1",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
     "supertest": "^6.3.3"
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "license": "MIT"
+  }
 }
