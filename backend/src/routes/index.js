@@ -1,8 +1,9 @@
+const express = require('express');
 const authRoutes = require('./auth.routes');
-const equipmentRoutes = require('./equipment.routes');
 const userRoutes = require('./user.routes');
+const equipmentRoutes = require('./equipment.routes');
 const insuranceRoutes = require('./insurance.routes');
-const bandRoutes = require('./band.routes');
+const { ApiError } = require('../middleware/errorHandler');
 
 /**
  * Initialize all routes
@@ -27,17 +28,13 @@ const setupRoutes = (app) => {
   app.use(`${API_PREFIX}/equipment`, equipmentRoutes);
   app.use(`${API_PREFIX}/users`, userRoutes);
   app.use(`${API_PREFIX}/insurance`, insuranceRoutes);
-  app.use(`${API_PREFIX}/bands`, bandRoutes);
   
   // 404 handler for API routes
-  app.use(`${API_PREFIX}/*`, (req, res) => {
-    res.status(404).json({
-      success: false,
-      error: {
-        message: 'API endpoint not found',
-        code: 'NOT_FOUND'
-      }
-    });
+  app.use(`${API_PREFIX}/*`, (req, res, next) => {
+    next(ApiError.notFound(
+      `Resource not found: ${req.originalUrl}`, 
+      'API_NOT_FOUND'
+    ));
   });
 };
 
