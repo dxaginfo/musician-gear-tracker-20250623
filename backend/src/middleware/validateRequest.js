@@ -9,14 +9,19 @@ const validateRequest = (req, res, next) => {
   const errors = validationResult(req);
   
   if (!errors.isEmpty()) {
-    const firstError = errors.array()[0];
-    const errorMessage = `${firstError.path}: ${firstError.msg}`;
+    const errorMessages = errors.array().map(error => {
+      return {
+        field: error.path,
+        message: error.msg,
+        value: error.value
+      };
+    });
     
-    // Return validation error with details
+    // For API consumers, it's helpful to return all validation errors at once
     throw ApiError.validationError(
-      errorMessage,
+      'Validation failed',
       'VALIDATION_ERROR'
-    );
+    ).withDetails(errorMessages);
   }
   
   next();
