@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const { ApiError } = require('../middleware/errorHandler');
 const logger = require('../utils/logger');
@@ -37,8 +38,8 @@ const register = async (req, res, next) => {
       emailVerified: false
     });
     
-    // Generate JWT token
-    const token = user.generateAuthToken();
+    // Generate JWT token and refresh token
+    const { token, refreshToken } = user.generateAuthTokens();
     
     // TODO: Send email verification email
     
@@ -55,7 +56,8 @@ const register = async (req, res, next) => {
           userType: user.userType,
           emailVerified: user.emailVerified
         },
-        token
+        token,
+        refreshToken
       }
     });
   } catch (error) {
@@ -75,8 +77,8 @@ const login = async (req, res, next) => {
     // Find user and check password
     const user = await User.login(email, password);
     
-    // Generate JWT token
-    const token = user.generateAuthToken();
+    // Generate JWT token and refresh token
+    const { token, refreshToken } = user.generateAuthTokens();
     
     // Return success response
     res.status(200).json({
@@ -91,12 +93,58 @@ const login = async (req, res, next) => {
           userType: user.userType,
           emailVerified: user.emailVerified
         },
-        token
+        token,
+        refreshToken
       }
     });
   } catch (error) {
     logger.error('Login error:', error);
     next(ApiError.unauthorized('Invalid email or password'));
+  }
+};
+
+/**
+ * @desc Refresh access token using refresh token
+ * @route POST /api/v1/auth/refresh-token
+ * @access Public
+ */
+const refreshToken = async (req, res, next) => {
+  try {
+    const { refreshToken: refreshTokenFromClient } = req.body;
+    
+    if (!refreshTokenFromClient) {
+      throw ApiError.badRequest('Refresh token is required');
+    }
+    
+    // Verify refresh token
+    const decoded = jwt.verify(
+      refreshTokenFromClient,
+      process.env.JWT_REFRESH_SECRET || 'musician-gear-tracker-refresh-secret'
+    );
+    
+    // Find user by ID
+    const user = await User.findById(decoded.id);
+    
+    if (!user) {
+      throw ApiError.unauthorized('Invalid refresh token');
+    }
+    
+    // Generate new access token
+    const { token, refreshToken: newRefreshToken } = user.generateAuthTokens();
+    
+    // Return new tokens
+    res.status(200).json({
+      success: true,
+      data: {
+        token,
+        refreshToken: newRefreshToken
+      }
+    });
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return next(ApiError.unauthorized('Invalid or expired refresh token'));
+    }
+    next(error);
   }
 };
 
@@ -169,7 +217,7 @@ const resetPassword = async (req, res, next) => {
     await user.save();
     
     // Generate new JWT token
-    const jwtToken = user.generateAuthToken();
+    const { token: jwtToken, refreshToken } = user.generateAuthTokens();
     
     // TODO: Send password changed email
     
@@ -178,7 +226,8 @@ const resetPassword = async (req, res, next) => {
       success: true,
       message: 'Password reset successful',
       data: {
-        token: jwtToken
+        token: jwtToken,
+        refreshToken
       }
     });
   } catch (error) {
@@ -223,6 +272,151 @@ const verifyEmail = async (req, res, next) => {
 };
 
 /**
+ * @desc Resend verification email
+ * @route POST /api/v1/auth/resend-verification
+ * @access Public
+ */
+const resendVerificationEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    
+    // Find user by email
+    const user = await User.findOne({ email });
+    
+    if (!user) {
+      // Return success anyway to prevent email enumeration
+      return res.status(200).json({
+        success: true,
+        message: 'Verification email sent'
+      });
+    }
+    
+    if (user.emailVerified) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Email is already verified',
+          code: 'EMAIL_ALREADY_VERIFIED'
+        }
+      });
+    }
+    
+    // Generate new verification token
+    const emailVerificationToken = crypto
+      .randomBytes(32)
+      .toString('hex');
+    
+    user.emailVerificationToken = emailVerificationToken;
+    await user.save();
+    
+    // TODO: Send verification email
+    
+    // Return success response
+    res.status(200).json({
+      success: true,
+      message: 'Verification email sent'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc Check if user is authenticated
+ * @route GET /api/v1/auth/check
+ * @access Private
+ */
+const checkAuth = async (req, res, next) => {
+  try {
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: req.user._id,
+          email: req.user.email,
+          firstName: req.user.firstName,
+          lastName: req.user.lastName,
+          userType: req.user.userType,
+          emailVerified: req.user.emailVerified
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc Login/register with Google OAuth
+ * @route POST /api/v1/auth/social/google
+ * @access Public
+ */
+const googleAuth = async (req, res, next) => {
+  try {
+    const { idToken } = req.body;
+    
+    // TODO: Verify Google ID token
+    // const ticket = await googleClient.verifyIdToken({
+    //   idToken,
+    //   audience: process.env.GOOGLE_CLIENT_ID
+    // });
+    // const payload = ticket.getPayload();
+    
+    // For now, just create a mock payload
+    const payload = {
+      email: 'google-user@example.com',
+      given_name: 'Google',
+      family_name: 'User',
+      email_verified: true
+    };
+    
+    // Check if user already exists
+    let user = await User.findOne({ email: payload.email });
+    
+    if (user) {
+      // User exists, update if needed
+      if (!user.googleId) {
+        user.googleId = payload.sub;
+        await user.save();
+      }
+    } else {
+      // Create new user
+      user = await User.create({
+        email: payload.email,
+        firstName: payload.given_name,
+        lastName: payload.family_name,
+        googleId: payload.sub,
+        emailVerified: payload.email_verified,
+        passwordHash: crypto.randomBytes(16).toString('hex') // Random password
+      });
+    }
+    
+    // Generate JWT token and refresh token
+    const { token, refreshToken } = user.generateAuthTokens();
+    
+    // Return success response
+    res.status(200).json({
+      success: true,
+      message: 'Google authentication successful',
+      data: {
+        user: {
+          id: user._id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          userType: user.userType,
+          emailVerified: user.emailVerified
+        },
+        token,
+        refreshToken
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * @desc Logout user
  * @route POST /api/v1/auth/logout
  * @access Private
@@ -244,8 +438,12 @@ const logout = async (req, res, next) => {
 module.exports = {
   register,
   login,
+  refreshToken,
   forgotPassword,
   resetPassword,
   verifyEmail,
+  resendVerificationEmail,
+  checkAuth,
+  googleAuth,
   logout
 };
