@@ -9,9 +9,20 @@ class ApiError extends Error {
     this.statusCode = statusCode;
     this.code = code;
     this.isOperational = true;
+    this.details = null;
     
     // Capture the stack trace
     Error.captureStackTrace(this, this.constructor);
+  }
+  
+  /**
+   * Add detailed error information
+   * @param {Object|Array} details - Detailed error information
+   * @returns {ApiError} - Returns this for chaining
+   */
+  withDetails(details) {
+    this.details = details;
+    return this;
   }
   
   // Factory methods for common errors
@@ -42,6 +53,10 @@ class ApiError extends Error {
   static internalError(message, code = 'SERVER_ERROR') {
     return new ApiError(500, message, code);
   }
+  
+  static tooManyRequests(message, code = 'RATE_LIMIT_EXCEEDED') {
+    return new ApiError(429, message, code);
+  }
 }
 
 /**
@@ -62,22 +77,26 @@ const errorHandler = (err, req, res, next) => {
       success: false,
       error: {
         message: err.message,
-        code: err.code
+        code: err.code,
+        ...(err.details && { details: err.details })
       }
     });
   }
   
   // Check for Mongoose validation errors
   if (err.name === 'ValidationError') {
-    const message = Object.values(err.errors)
-      .map(error => error.message)
-      .join(', ');
+    const details = Object.keys(err.errors).map(field => ({
+      field,
+      message: err.errors[field].message,
+      value: err.errors[field].value
+    }));
     
     return res.status(422).json({
       success: false,
       error: {
-        message,
-        code: 'VALIDATION_ERROR'
+        message: 'Validation failed',
+        code: 'VALIDATION_ERROR',
+        details
       }
     });
   }
@@ -85,13 +104,14 @@ const errorHandler = (err, req, res, next) => {
   // Check for Mongoose duplicate key errors
   if (err.code === 11000) {
     const field = Object.keys(err.keyValue)[0];
-    const message = `Duplicate value for ${field}`;
+    const value = err.keyValue[field];
     
     return res.status(409).json({
       success: false,
       error: {
-        message,
-        code: 'DUPLICATE_ERROR'
+        message: `Duplicate value for ${field}`,
+        code: 'DUPLICATE_ERROR',
+        details: [{ field, value }]
       }
     });
   }
