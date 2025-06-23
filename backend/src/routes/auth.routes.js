@@ -2,6 +2,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const authController = require('../controllers/auth.controller');
 const validateRequest = require('../middleware/validateRequest');
+const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
@@ -62,6 +63,22 @@ router.post(
 );
 
 /**
+ * @route POST /api/v1/auth/refresh-token
+ * @desc Refresh access token using refresh token
+ * @access Public
+ */
+router.post(
+  '/refresh-token',
+  [
+    body('refreshToken')
+      .notEmpty()
+      .withMessage('Refresh token is required')
+  ],
+  validateRequest,
+  authController.refreshToken
+);
+
+/**
  * @route POST /api/v1/auth/forgot-password
  * @desc Request password reset
  * @access Public
@@ -115,10 +132,49 @@ router.post(
 );
 
 /**
+ * @route POST /api/v1/auth/resend-verification
+ * @desc Resend verification email
+ * @access Public
+ */
+router.post(
+  '/resend-verification',
+  [
+    body('email')
+      .isEmail()
+      .withMessage('Please provide a valid email address')
+  ],
+  validateRequest,
+  authController.resendVerificationEmail
+);
+
+/**
  * @route POST /api/v1/auth/logout
  * @desc Logout user
  * @access Private
  */
-router.post('/logout', authController.logout);
+router.post('/logout', authMiddleware, authController.logout);
+
+/**
+ * @route GET /api/v1/auth/check
+ * @desc Check if user is authenticated
+ * @access Private
+ */
+router.get('/check', authMiddleware, authController.checkAuth);
+
+/**
+ * @route POST /api/v1/auth/social/google
+ * @desc Google OAuth login/signup
+ * @access Public
+ */
+router.post(
+  '/social/google',
+  [
+    body('idToken')
+      .notEmpty()
+      .withMessage('Google ID token is required')
+  ],
+  validateRequest,
+  authController.googleAuth
+);
 
 module.exports = router;
