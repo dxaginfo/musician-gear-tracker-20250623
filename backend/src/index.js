@@ -8,7 +8,7 @@ const { createClient } = require('redis');
 
 const { setupRoutes } = require('./routes');
 const logger = require('./utils/logger');
-const errorHandler = require('./middleware/errorHandler');
+const { errorHandler } = require('./middleware/errorHandler');
 
 // Initialize Express app
 const app = express();
